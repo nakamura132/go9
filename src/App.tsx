@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { estimateDeadStones } from "./core/deadstones";
+import { guessDeadStones } from "./core/sabaki";
 import { BOARD_SIZE, indexOf } from "./core/board";
 import { estimateScore, newGame, pass, play, resume, type GameState } from "./core/game";
 
@@ -10,6 +12,9 @@ export default function App() {
   const [selected, setSelected] = useState<Point | null>(null);
   const [message, setMessage] = useState("交点をタップして選択し、もう一度タップして確定");
   const [showScore, setShowScore] = useState(false);
+  const [dead, setDead] = useState<readonly boolean[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [deadMessage, setDeadMessage] = useState("");
   const score = showScore || game.finished ? estimateScore(game) : null;
 
   function tap(row: number, col: number) {
@@ -21,6 +26,8 @@ export default function App() {
       setGame(result.state);
       setSelected(null);
       setShowScore(false);
+      setDead(null);
+      setDeadMessage("");
       setMessage(result.captured ? `${result.captured}子を取りました` : "着手しました");
     } else { setSelected({ row, col }); setMessage("同じ交点をもう一度タップすると確定"); }
   }
@@ -30,7 +37,22 @@ export default function App() {
     setGame(next);
     setSelected(null);
     setShowScore(false);
+    setDead(null);
+    setDeadMessage("");
     setMessage(next.finished ? "双方が連続してパスしました。終局です" : `${label(game.toPlay)}がパスしました`);
+  }
+  async function checkDead() {
+    if (busy) return;
+    setBusy(true);
+    setDead(null);
+    setDeadMessage("Sabakiの死石推定を実行中…");
+    try {
+      const result = await estimateDeadStones(game.board, guessDeadStones, 100);
+      setDead(result.dead);
+      setDeadMessage(`推定された死石：${result.vertices.length}子。黄色の印は推定候補であり、確定判定ではありません。`);
+    } catch (error) {
+      setDeadMessage(`死石推定に失敗しました：${error instanceof Error ? error.message : String(error)}`);
+    } finally { setBusy(false); }
   }
   return <main className="app"><header><h1>go9</h1><p>9路盤囲碁 — ルール実装版</p></header>
     <section className="panel"><p className="status">{game.finished ? "終局（連続2回パス）" : `手番：${game.toPlay === 1 ? "●" : "○"} ${label(game.toPlay)}`}　{game.moveNumber}手目</p>
@@ -38,16 +60,18 @@ export default function App() {
         const row = Math.floor(i / BOARD_SIZE), col = i % BOARD_SIZE;
         const stone = game.board[i];
         const active = selected?.row === row && selected.col === col;
-        return <button key={i} className={`point ${stone === 1 ? "black" : stone === 2 ? "white" : ""} ${active ? "selected" : ""}`}
+        return <button key={i} className={`point ${dead?.[i] ? "dead-candidate" : ""} ${stone === 1 ? "black" : stone === 2 ? "white" : ""} ${active ? "selected" : ""}`}
           aria-label={`${row + 1}行${col + 1}列${stone ? ` ${label(stone)}石` : active ? " 選択中" : " 空点"}`}
           aria-pressed={active} onClick={() => tap(row, col)}><span className="stone" /></button>;
       })}</div>
       <p className="captures">取った石：黒 {game.captures[1]}子 ／ 白 {game.captures[2]}子</p>
       <p className="message" role="status">{message}</p>
+      {deadMessage && <p className="dead-message" role="status">{deadMessage}</p>}
       <div className="controls"><button onClick={doPass} disabled={game.finished}>パス</button>
+        <button onClick={checkDead} disabled={busy}>{busy ? "推定中…" : "死石を自動推定"}</button>
         <button onClick={() => setShowScore(value => !value)}>{showScore ? "形勢表示を閉じる" : "形勢を確認"}</button>
-        {game.finished && <button onClick={() => { setGame(resume(game)); setShowScore(false); setMessage("対局を再開しました"); }}>対局を再開</button>}
-        <button className="reset" onClick={() => { setGame(newGame()); setSelected(null); setShowScore(false); setMessage("盤面を初期化しました"); }}>最初から</button></div>
+        {game.finished && <button onClick={() => { setGame(resume(game)); setShowScore(false); setDead(null); setDeadMessage(""); setMessage("対局を再開しました"); }}>対局を再開</button>}
+        <button className="reset" onClick={() => { setGame(newGame()); setSelected(null); setShowScore(false); setDead(null); setDeadMessage(""); setMessage("盤面を初期化しました"); }}>最初から</button></div>
       {score && <section className="score" aria-label="簡易形勢判断"><h2>簡易形勢判断（暫定）</h2>
         <p>黒：{score.black}目（地 {score.blackTerritory} ＋ アゲハマ {game.captures[1]}）</p>
         <p>白：{score.white}目（地 {score.whiteTerritory} ＋ アゲハマ {game.captures[2]} ＋ コミ 6.5）</p>
@@ -55,5 +79,5 @@ export default function App() {
         <strong>{score.winner === "tie" ? "同点" : `${score.winner === "black" ? "黒" : "白"}が${score.margin}目優勢`}</strong>
         <small>死石・セキ・ダメの正確な判定は未実装です。日本ルールの確定結果ではありません。</small>
       </section>}
-    </section><footer>Phase 1 — 取り上げ・自殺手・単純コウ・パス・暫定形勢判断</footer></main>;
+    </section><footer>死石の自動推定は試験機能です。勝敗計算への反映は今後実装</footer></main>;
 }
