@@ -68,3 +68,40 @@ type ScoringOutput = {
 - https://github.com/online-go/goban
 - https://github.com/aprescott/tenuki
 - https://github.com/online-go/score-estimator
+
+## 追加調査: 自動死石判定（2026-10-21）
+
+**結論**: 死石推定の既存実装は存在する。手動指定のみを最終形にしない。
+まず実績のある **OGS score-estimator** と、明確なAPIを持つ **@sabaki/deadstones** を比較検証する。
+
+| 候補 | 死石推定 | API/配布 | メモ |
+| --- | --- | --- | --- |
+| [@sabaki/deadstones](https://github.com/SabakiHQ/deadstones) | モンテカルロによる死石候補推定 | `guess(board, { finished, iterations }) -> Promise<[x,y][]>`。npm ESM、ブラウザWASM（`useFetch`設定） | **最初のPoC候補**。APIが明確。MIT。確率的推定なので誤判定あり |
+| [OGS score-estimator](https://github.com/online-go/score-estimator) | 実際のOGSで使われる死石除去提案 | C++ / Emscripten JS。JSバインディングを調査してアダプター化 | **比較基準**。MIT。実運用実績が強み |
+| [Sagebati/goban](https://github.com/Sagebati/goban) | `deadstones`オプション（実験的） | Rust crate。ブラウザ導入は追加検証 | **参考候補**。README上「境界が閉じた場合のみ」 |
+| [goscorer](https://github.com/lightvector/goscorer) | 死石推定はしない | 死石マスクを入力し日本式の地を採点 | **推定後の採点**を担当 |
+
+### 死石推定と採点の分離
+
+```text
+盤面 → 死石推定器（Sabaki / OGS）→ 死石候補の座標群
+                                    ↓
+                          グループ単位で確認・修正
+                                    ↓
+                    goscorer（地・セキ・ダメの採点）
+                                    ↓
+                         暫定／確認済みの結果
+```
+
+推定器が返すのは**候補**であって日本囲碁規約における最終裁定ではない。推定器の精度を通常の9路盤終局局面で比較し、明らかな誤判定を防ぐ。
+
+### 次のPoC受け入れ条件
+
+1. `@sabaki/deadstones` の9路盤入力・座標出力を既存の81点配列に変換する純粋なアダプターを用意。
+2. Viteのビルド・GitHub Pages配下のWASM配信・iPhone Safariでの初期化を検証。
+3. OGS推定器にも同一のテスト局面を入力し、推定結果を比較。
+4. 典型的な死石、二眼の生き、セキ、未確定局面をテスト。推定器が異なる局面は**要確認**として扱う。
+5. 自動候補の表示と手動修正を用意。判定不能時は「未確定」を表示し、勝敗を断定しない。
+6. MITライセンスの著作権表示と利用バージョンを記録。
+
+**優先順位変更**: 死石自動推定を先行PoCの必須対象とする。採点だけを実装して完了扱いにはしない。
