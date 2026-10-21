@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { exportSgf, importSgf } from "./core/sgf";
+import { formatTextBoard } from "./core/textBoard";
 import { estimateDeadStones } from "./core/deadstones";
 import { guessDeadStones } from "./core/sabaki";
 import { BOARD_SIZE, indexOf } from "./core/board";
@@ -60,6 +61,17 @@ export default function App() {
       setDeadMessage(`死石推定に失敗しました：${error instanceof Error ? error.message : String(error)}`);
     } finally { setBusy(false); }
   }
+  async function copyTextBoard() {
+    const value = formatTextBoard(game.board, dead, game.toPlay);
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage("テキスト碁盤をコピーしました。このチャットに貼り付けられます");
+    } catch {
+      setSgfText(value);
+      setSgfOpen(true);
+      setMessage("自動コピーできませんでした。表示されたテキストを長押ししてコピーしてください（SGFではありません）");
+    }
+  }
   async function copySgf() {
     const value = exportSgf(game, dead);
     setSgfText(value);
@@ -100,6 +112,7 @@ export default function App() {
       {dead && <p className="dead-count" role="status">死石候補：<strong>黒 {deadBlack}子 ／ 白 {deadWhite}子</strong>{deadBlack + deadWhite === 0 ? "（候補なし）" : ""}</p>}
       <div className="controls"><button onClick={doPass} disabled={game.finished}>パス</button>
         <button onClick={checkDead} disabled={busy}>{busy ? "推定中…" : "死石を自動推定"}</button>
+        <button onClick={copyTextBoard}>テキスト碁盤コピー</button>
         <button onClick={copySgf}>SGFコピー</button>
         <button onClick={() => setSgfOpen(value => !value)}>SGF貼り付け</button>
         <button onClick={() => setShowScore(value => !value)}>{showScore ? "形勢表示を閉じる" : "形勢を確認"}</button>
