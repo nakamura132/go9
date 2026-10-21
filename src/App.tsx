@@ -4,6 +4,7 @@ import { guessDeadStones } from "./core/sabaki";
 import { BOARD_SIZE, indexOf } from "./core/board";
 import { estimateScore, newGame, pass, play, resume, type GameState } from "./core/game";
 
+declare const __APP_VERSION__: string;
 type Point = { row: number; col: number };
 const label = (player: 1 | 2) => player === 1 ? "黒" : "白";
 
@@ -15,6 +16,8 @@ export default function App() {
   const [dead, setDead] = useState<readonly boolean[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [deadMessage, setDeadMessage] = useState("");
+  const deadBlack = dead?.reduce((n, value, i) => n + (value && game.board[i] === 1 ? 1 : 0), 0) ?? 0;
+  const deadWhite = dead?.reduce((n, value, i) => n + (value && game.board[i] === 2 ? 1 : 0), 0) ?? 0;
   const score = showScore || game.finished ? estimateScore(game) : null;
 
   function tap(row: number, col: number) {
@@ -49,24 +52,25 @@ export default function App() {
     try {
       const result = await estimateDeadStones(game.board, guessDeadStones, 100);
       setDead(result.dead);
-      setDeadMessage(`推定された死石：${result.vertices.length}子。黄色の印は推定候補であり、確定判定ではありません。`);
+      setDeadMessage("推定が完了しました。盤上の×印と色別の集計をご確認ください。確定判定ではありません。");
     } catch (error) {
       setDeadMessage(`死石推定に失敗しました：${error instanceof Error ? error.message : String(error)}`);
     } finally { setBusy(false); }
   }
-  return <main className="app"><header><h1>go9</h1><p>9路盤囲碁 — ルール実装版</p></header>
+  return <main className="app"><header><h1>go9 <span className="version">v{__APP_VERSION__}</span></h1><p>9路盤囲碁 — ルール実装版</p></header>
     <section className="panel"><p className="status">{game.finished ? "終局（連続2回パス）" : `手番：${game.toPlay === 1 ? "●" : "○"} ${label(game.toPlay)}`}　{game.moveNumber}手目</p>
       <div className="board" role="group" aria-label="9路盤">{Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) => {
         const row = Math.floor(i / BOARD_SIZE), col = i % BOARD_SIZE;
         const stone = game.board[i];
         const active = selected?.row === row && selected.col === col;
         return <button key={i} className={`point ${dead?.[i] ? "dead-candidate" : ""} ${stone === 1 ? "black" : stone === 2 ? "white" : ""} ${active ? "selected" : ""}`}
-          aria-label={`${row + 1}行${col + 1}列${stone ? ` ${label(stone)}石` : active ? " 選択中" : " 空点"}`}
-          aria-pressed={active} onClick={() => tap(row, col)}><span className="stone" /></button>;
+          aria-label={`${row + 1}行${col + 1}列${stone ? ` ${label(stone)}石${dead?.[i] ? " 死石候補" : ""}` : active ? " 選択中" : " 空点"}`}
+          aria-pressed={active} onClick={() => tap(row, col)}><span className="stone" />{dead?.[i] && <span className="dead-mark" aria-hidden="true">×</span>}</button>;
       })}</div>
       <p className="captures">取った石：黒 {game.captures[1]}子 ／ 白 {game.captures[2]}子</p>
       <p className="message" role="status">{message}</p>
       {deadMessage && <p className="dead-message" role="status">{deadMessage}</p>}
+      {dead && <p className="dead-count" role="status">死石候補：<strong>黒 {deadBlack}子 ／ 白 {deadWhite}子</strong>{deadBlack + deadWhite === 0 ? "（候補なし）" : ""}</p>}
       <div className="controls"><button onClick={doPass} disabled={game.finished}>パス</button>
         <button onClick={checkDead} disabled={busy}>{busy ? "推定中…" : "死石を自動推定"}</button>
         <button onClick={() => setShowScore(value => !value)}>{showScore ? "形勢表示を閉じる" : "形勢を確認"}</button>
