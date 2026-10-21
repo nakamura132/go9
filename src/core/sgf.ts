@@ -1,5 +1,5 @@
 import { parse, stringify } from "@sabaki/sgf";
-import { BOARD_SIZE, type Board, type Stone } from "./board";
+import { BOARD_SIZE, type Stone } from "./board";
 import { newGame, type GameState } from "./game";
 
 type Node = { data: Record<string, string[]>; children: Node[] };
